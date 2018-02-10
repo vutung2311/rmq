@@ -38,11 +38,11 @@ func (cleaner *Cleaner) CleanConnection(connection *redisConnection) error {
 	}
 
 	if !connection.Close() {
-		return fmt.Errorf("rmq cleaner failed to close connection %s", connection)
+		return fmt.Errorf("rmq cleaner failed to close connection %v", connection)
 	}
 
 	if err := connection.CloseAllQueuesInConnection(); err != nil {
-		return fmt.Errorf("rmq cleaner failed to close all queues %d %s", connection, err)
+		return fmt.Errorf("rmq cleaner failed to close all queues %+v %s", connection, err)
 	}
 
 	// log.Printf("rmq cleaner cleaned connection %s", connection)

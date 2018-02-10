@@ -31,7 +31,7 @@ func (suite *StatsSuite) TestStats(c *C) {
 	q2.Publish("stats-d2")
 	q2.Publish("stats-d3")
 	q2.Publish("stats-d4")
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	consumer.LastDeliveries[0].Ack()
 	consumer.LastDeliveries[1].Reject()
 	q2.AddConsumer("stats-cons2", NewTestConsumer("hand-B"))

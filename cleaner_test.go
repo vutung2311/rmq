@@ -41,7 +41,7 @@ func (suite *CleanerSuite) TestCleaner(c *C) {
 
 	c.Check(queue.UnackedCount(), Equals, 0)
 	queue.StartConsuming(2, time.Millisecond)
-	time.Sleep(time.Millisecond)
+	time.Sleep(2 * time.Millisecond)
 	c.Check(queue.UnackedCount(), Equals, 2)
 	c.Check(queue.ReadyCount(), Equals, 4)
 
@@ -50,7 +50,7 @@ func (suite *CleanerSuite) TestCleaner(c *C) {
 	consumer.AutoAck = false
 
 	queue.AddConsumer("consumer1", consumer)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.UnackedCount(), Equals, 3)
 	c.Check(queue.ReadyCount(), Equals, 3)
 
@@ -62,7 +62,7 @@ func (suite *CleanerSuite) TestCleaner(c *C) {
 	c.Check(queue.ReadyCount(), Equals, 3)
 
 	consumer.Finish()
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.UnackedCount(), Equals, 3)
 	c.Check(queue.ReadyCount(), Equals, 2)
 	c.Check(consumer.LastDelivery.Payload(), Equals, "del2")
@@ -87,7 +87,7 @@ func (suite *CleanerSuite) TestCleaner(c *C) {
 
 	c.Check(queue.UnackedCount(), Equals, 0)
 	queue.StartConsuming(2, time.Millisecond)
-	time.Sleep(time.Millisecond)
+	time.Sleep(2 * time.Millisecond)
 	c.Check(queue.UnackedCount(), Equals, 2)
 	c.Check(queue.ReadyCount(), Equals, 5)
 

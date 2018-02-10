@@ -22,7 +22,7 @@ func (queue *TestQueue) Publish(payload string) bool {
 	return true
 }
 
-func (queue *TestQueue) PublishBytes(payload []byte) bool {
+func (queue *TestQueue) PublishToDelayedQueue(payload string, delayedTime time.Duration) bool {
 	return queue.Publish(string(payload))
 }
 

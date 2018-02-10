@@ -2,6 +2,7 @@ package rmq
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/adjust/gocheck"
 )
@@ -40,4 +41,15 @@ func (suite *DeliverySuite) TestDeliveryReject(c *C) {
 	c.Check(delivery.Reject(), Equals, false)
 	c.Check(delivery.Ack(), Equals, false)
 	c.Check(delivery.State, Equals, Rejected)
+}
+
+func (suite *DeliverySuite) TestDeliveryDelay(c *C) {
+	delivery := NewTestDelivery("p")
+	c.Check(delivery.State, Equals, Unacked)
+	c.Check(delivery.Delay(time.Second), Equals, true)
+	c.Check(delivery.State, Equals, Delayed)
+
+	c.Check(delivery.Ack(), Equals, false)
+	c.Check(delivery.Reject(), Equals, false)
+	c.Check(delivery.State, Equals, Delayed)
 }

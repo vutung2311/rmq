@@ -138,14 +138,14 @@ func (suite *QueueSuite) TestConsumer(c *C) {
 	c.Check(consumer.LastDelivery, IsNil)
 
 	c.Check(queue.Publish("cons-d1"), Equals, true)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Assert(consumer.LastDelivery, NotNil)
 	c.Check(consumer.LastDelivery.Payload(), Equals, "cons-d1")
 	c.Check(queue.ReadyCount(), Equals, 0)
 	c.Check(queue.UnackedCount(), Equals, 1)
 
 	c.Check(queue.Publish("cons-d2"), Equals, true)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(consumer.LastDelivery.Payload(), Equals, "cons-d2")
 	c.Check(queue.ReadyCount(), Equals, 0)
 	c.Check(queue.UnackedCount(), Equals, 2)
@@ -161,7 +161,7 @@ func (suite *QueueSuite) TestConsumer(c *C) {
 	c.Check(consumer.LastDeliveries[0].Ack(), Equals, false)
 
 	c.Check(queue.Publish("cons-d3"), Equals, true)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.ReadyCount(), Equals, 0)
 	c.Check(queue.UnackedCount(), Equals, 1)
 	c.Check(queue.RejectedCount(), Equals, 0)
@@ -172,7 +172,7 @@ func (suite *QueueSuite) TestConsumer(c *C) {
 	c.Check(queue.RejectedCount(), Equals, 1)
 
 	c.Check(queue.Publish("cons-d4"), Equals, true)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.ReadyCount(), Equals, 0)
 	c.Check(queue.UnackedCount(), Equals, 1)
 	c.Check(queue.RejectedCount(), Equals, 1)
@@ -184,6 +184,19 @@ func (suite *QueueSuite) TestConsumer(c *C) {
 	c.Check(queue.PurgeRejected(), Equals, 2)
 	c.Check(queue.RejectedCount(), Equals, 0)
 	c.Check(queue.PurgeRejected(), Equals, 0)
+
+	c.Check(queue.PublishToDelayedQueue("cons-d5", 100*time.Millisecond), Equals, true)
+	c.Check(queue.UnackedCount(), Equals, 0)
+	c.Check(queue.DelayedCount(), Equals, 1)
+	time.Sleep(200 * time.Millisecond)
+	c.Check(queue.UnackedCount(), Equals, 1)
+	c.Check(queue.DelayedCount(), Equals, 0)
+	c.Check(consumer.LastDelivery.Payload(), Equals, "cons-d5")
+	c.Check(consumer.LastDelivery.Delay(100*time.Millisecond), Equals, true)
+	c.Check(queue.UnackedCount(), Equals, 0)
+	c.Check(queue.DelayedCount(), Equals, 1)
+	c.Check(queue.PurgeDelayed(), Equals, 1)
+	c.Check(queue.DelayedCount(), Equals, 0)
 
 	queue.StopConsuming()
 	connection.StopHeartbeat()
@@ -201,7 +214,7 @@ func (suite *QueueSuite) TestMulti(c *C) {
 	c.Check(queue.UnackedCount(), Equals, 0)
 
 	queue.StartConsuming(10, time.Millisecond)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.ReadyCount(), Equals, 10)
 	c.Check(queue.UnackedCount(), Equals, 10)
 
@@ -210,27 +223,27 @@ func (suite *QueueSuite) TestMulti(c *C) {
 	consumer.AutoFinish = false
 
 	queue.AddConsumer("multi-cons", consumer)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.ReadyCount(), Equals, 9)
 	c.Check(queue.UnackedCount(), Equals, 11)
 
 	c.Check(consumer.LastDelivery.Ack(), Equals, true)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.ReadyCount(), Equals, 9)
 	c.Check(queue.UnackedCount(), Equals, 10)
 
 	consumer.Finish()
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.ReadyCount(), Equals, 8)
 	c.Check(queue.UnackedCount(), Equals, 11)
 
 	c.Check(consumer.LastDelivery.Ack(), Equals, true)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.ReadyCount(), Equals, 8)
 	c.Check(queue.UnackedCount(), Equals, 10)
 
 	consumer.Finish()
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.ReadyCount(), Equals, 7)
 	c.Check(queue.UnackedCount(), Equals, 11)
 
@@ -249,7 +262,7 @@ func (suite *QueueSuite) TestBatch(c *C) {
 	}
 
 	queue.StartConsuming(10, time.Millisecond)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.UnackedCount(), Equals, 5)
 
 	consumer := NewTestBatchConsumer()
@@ -301,7 +314,7 @@ func (suite *QueueSuite) TestReturnRejected(c *C) {
 	c.Check(queue.RejectedCount(), Equals, 0)
 
 	queue.StartConsuming(10, time.Millisecond)
-	time.Sleep(time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.ReadyCount(), Equals, 0)
 	c.Check(queue.UnackedCount(), Equals, 6)
 	c.Check(queue.RejectedCount(), Equals, 0)
@@ -309,7 +322,7 @@ func (suite *QueueSuite) TestReturnRejected(c *C) {
 	consumer := NewTestConsumer("return-cons")
 	consumer.AutoAck = false
 	queue.AddConsumer("cons", consumer)
-	time.Sleep(time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.ReadyCount(), Equals, 0)
 	c.Check(queue.UnackedCount(), Equals, 6)
 	c.Check(queue.RejectedCount(), Equals, 0)
@@ -322,7 +335,7 @@ func (suite *QueueSuite) TestReturnRejected(c *C) {
 	// delivery 4 still open
 	consumer.LastDeliveries[5].Reject()
 
-	time.Sleep(time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue.ReadyCount(), Equals, 0)
 	c.Check(queue.UnackedCount(), Equals, 1)  // delivery 4
 	c.Check(queue.RejectedCount(), Equals, 4) // delivery 0, 2, 3, 5
@@ -335,6 +348,7 @@ func (suite *QueueSuite) TestReturnRejected(c *C) {
 	c.Check(queue.RejectedCount(), Equals, 2) // delivery 3, 5
 
 	queue.ReturnAllRejected()
+	time.Sleep(100 * time.Millisecond)
 	c.Check(queue.ReadyCount(), Equals, 4)   // delivery 0, 2, 3, 5
 	c.Check(queue.UnackedCount(), Equals, 1) // delivery 4
 	c.Check(queue.RejectedCount(), Equals, 0)
@@ -360,18 +374,18 @@ func (suite *QueueSuite) TestPushQueue(c *C) {
 	queue2.AddConsumer("push-cons", consumer2)
 
 	queue1.Publish("d1")
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue1.UnackedCount(), Equals, 1)
 	c.Assert(consumer1.LastDeliveries, HasLen, 1)
 
 	c.Check(consumer1.LastDelivery.Push(), Equals, true)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue1.UnackedCount(), Equals, 0)
 	c.Check(queue2.UnackedCount(), Equals, 1)
 
 	c.Assert(consumer2.LastDeliveries, HasLen, 1)
 	c.Check(consumer2.LastDelivery.Push(), Equals, true)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	c.Check(queue2.RejectedCount(), Equals, 1)
 }
 
