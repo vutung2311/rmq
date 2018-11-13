@@ -6,6 +6,8 @@ independently with a different interface in mind.
 
 [redismq]: https://github.com/adjust/redismq
 
+[![wercker status](https://app.wercker.com/status/6d070e17a03feafa52c4d322dbf548cf/s/master "wercker status")](https://app.wercker.com/project/byKey/6d070e17a03feafa52c4d322dbf548cf)
+
 ## Basic Usage
 
 Lets take a look at how to use rmq.

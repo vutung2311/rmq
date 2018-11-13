@@ -1,0 +1,17 @@
+version: '2'
+
+services:
+  redis:
+    image: redis:alpine
+  rmq:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    volumes:
+      - ./:/go/src/rmq
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    command: bash -c "cd /go/src/rmq && go get -t ./... && go test ./..."
+    depends_on:
+      - redis

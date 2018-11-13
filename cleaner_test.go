@@ -1,6 +1,8 @@
 package rmq
 
 import (
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -14,11 +16,11 @@ func TestCleanerSuite(t *testing.T) {
 type CleanerSuite struct{}
 
 func (suite *CleanerSuite) TestCleaner(c *C) {
-	flushConn := OpenConnection("cleaner-flush", "tcp", "localhost:6379", 1)
+	flushConn := OpenConnection("cleaner-flush", "tcp", fmt.Sprintf("%s:%s", os.Getenv("REDIS_HOST"), os.Getenv("REDIS_PORT")), 1)
 	flushConn.flushDb()
 	flushConn.StopHeartbeat()
 
-	conn := OpenConnection("cleaner-conn1", "tcp", "localhost:6379", 1)
+	conn := OpenConnection("cleaner-conn1", "tcp", fmt.Sprintf("%s:%s", os.Getenv("REDIS_HOST"), os.Getenv("REDIS_PORT")), 1)
 	c.Check(conn.GetOpenQueues(), HasLen, 0)
 	queue := conn.OpenQueue("q1").(*redisQueue)
 	c.Check(conn.GetOpenQueues(), HasLen, 1)
@@ -71,7 +73,7 @@ func (suite *CleanerSuite) TestCleaner(c *C) {
 	conn.StopHeartbeat()
 	time.Sleep(time.Millisecond)
 
-	conn = OpenConnection("cleaner-conn1", "tcp", "localhost:6379", 1)
+	conn = OpenConnection("cleaner-conn1", "tcp", fmt.Sprintf("%s:%s", os.Getenv("REDIS_HOST"), os.Getenv("REDIS_PORT")), 1)
 	queue = conn.OpenQueue("q1").(*redisQueue)
 
 	queue.Publish("del7")
@@ -116,13 +118,13 @@ func (suite *CleanerSuite) TestCleaner(c *C) {
 	conn.StopHeartbeat()
 	time.Sleep(time.Millisecond)
 
-	cleanerConn := OpenConnection("cleaner-conn", "tcp", "localhost:6379", 1)
+	cleanerConn := OpenConnection("cleaner-conn", "tcp", fmt.Sprintf("%s:%s", os.Getenv("REDIS_HOST"), os.Getenv("REDIS_PORT")), 1)
 	cleaner := NewCleaner(cleanerConn)
 	c.Check(cleaner.Clean(), IsNil)
 	c.Check(queue.ReadyCount(), Equals, 9) // 2 of 11 were acked above
 	c.Check(conn.GetOpenQueues(), HasLen, 2)
 
-	conn = OpenConnection("cleaner-conn1", "tcp", "localhost:6379", 1)
+	conn = OpenConnection("cleaner-conn1", "tcp", fmt.Sprintf("%s:%s", os.Getenv("REDIS_HOST"), os.Getenv("REDIS_PORT")), 1)
 	queue = conn.OpenQueue("q1").(*redisQueue)
 	queue.StartConsuming(10, time.Millisecond)
 	consumer = NewTestConsumer("c-C")
