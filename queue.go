@@ -5,6 +5,8 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/adjust/uniuri"
@@ -36,6 +38,7 @@ type Queue interface {
 	SetPushQueue(pushQueue Queue)
 	StartConsuming(prefetchLimit int, pollDuration time.Duration) bool
 	StopConsuming() bool
+	WaitForConsuming()
 	AddConsumer(tag string, consumer Consumer) string
 	AddBatchConsumer(tag string, batchSize int, consumer BatchConsumer) string
 	AddBatchConsumerWithTimeout(tag string, batchSize int, timeout time.Duration, consumer BatchConsumer) string
@@ -61,11 +64,13 @@ type redisQueue struct {
 	deliveryChan                chan Delivery // nil for publish channels, not nil for consuming channels
 	deliveryChanForDelayedQueue chan Delivery // nil for publish channels, not nil for consuming channels
 
+	consumerWaitGroup *sync.WaitGroup // WaitGroup to make sure that consuming finished in case of stop consuming
+
 	// max number of prefetched deliveries number of unacked can go up to prefetchLimit + numConsumers
 	prefetchLimit int
 
 	pollDuration     time.Duration
-	consumingStopped bool
+	consumingStopped int32
 }
 
 func newQueue(name, connectionName, queuesKey string, redisClient *redis.Client) *redisQueue {
@@ -80,17 +85,31 @@ func newQueue(name, connectionName, queuesKey string, redisClient *redis.Client)
 	unackedKey = strings.Replace(unackedKey, phQueue, name, 1)
 
 	queue := &redisQueue{
-		name:           name,
-		connectionName: connectionName,
-		queuesKey:      queuesKey,
-		consumersKey:   consumersKey,
-		readyKey:       readyKey,
-		delayedKey:     delayedKey,
-		rejectedKey:    rejectedKey,
-		unackedKey:     unackedKey,
-		redisClient:    redisClient,
+		name:              name,
+		connectionName:    connectionName,
+		queuesKey:         queuesKey,
+		consumersKey:      consumersKey,
+		readyKey:          readyKey,
+		delayedKey:        delayedKey,
+		rejectedKey:       rejectedKey,
+		unackedKey:        unackedKey,
+		redisClient:       redisClient,
+		consumerWaitGroup: new(sync.WaitGroup),
+		consumingStopped:  0,
 	}
 	return queue
+}
+
+func (queue *redisQueue) increaseConsumerCount() {
+	queue.consumerWaitGroup.Add(1)
+}
+
+func (queue *redisQueue) decreaseConsumerCount() {
+	queue.consumerWaitGroup.Done()
+}
+
+func (queue *redisQueue) WaitForConsuming() {
+	queue.consumerWaitGroup.Wait()
 }
 
 func (queue *redisQueue) String() string {
@@ -266,11 +285,11 @@ func (queue *redisQueue) StartConsuming(prefetchLimit int, pollDuration time.Dur
 }
 
 func (queue *redisQueue) StopConsuming() bool {
-	if queue.deliveryChan == nil || queue.deliveryChanForDelayedQueue == nil || queue.consumingStopped {
+	if queue.deliveryChan == nil || queue.deliveryChanForDelayedQueue == nil || atomic.LoadInt32(&queue.consumingStopped) == 1 {
 		return false // not consuming or already stopped
 	}
 
-	queue.consumingStopped = true
+	atomic.StoreInt32(&queue.consumingStopped, 1)
 	return true
 }
 
@@ -344,7 +363,8 @@ func (queue *redisQueue) consume() {
 			time.Sleep(queue.pollDuration)
 		}
 
-		if queue.consumingStopped {
+		if atomic.LoadInt32(&queue.consumingStopped) == 1 {
+			close(queue.deliveryChan)
 			// log.Printf("rmq queue stopped consuming %s", queue)
 			return
 		}
@@ -360,7 +380,8 @@ func (queue *redisQueue) consumeForDelayedQueue() {
 			time.Sleep(queue.pollDuration)
 		}
 
-		if queue.consumingStopped {
+		if atomic.LoadInt32(&queue.consumingStopped) == 1 {
+			close(queue.deliveryChanForDelayedQueue)
 			// log.Printf("rmq queue stopped consuming %s", queue)
 			return
 		}
@@ -459,16 +480,26 @@ func (queue *redisQueue) consumeBatchForDelayedQueue(batchSize int) bool {
 }
 
 func (queue *redisQueue) consumerConsume(consumer Consumer) {
+	queue.increaseConsumerCount()
+	defer queue.decreaseConsumerCount()
 	for delivery := range queue.deliveryChan {
 		// debug(fmt.Sprintf("consumer consume %s %s", delivery, consumer)) // COMMENTOUT
 		consumer.Consume(delivery)
+		if atomic.LoadInt32(&queue.consumingStopped) == 1 {
+			return
+		}
 	}
 }
 
 func (queue *redisQueue) consumerConsumeDelayedQueue(consumer Consumer) {
+	queue.increaseConsumerCount()
+	defer queue.decreaseConsumerCount()
 	for delivery := range queue.deliveryChanForDelayedQueue {
 		// debug(fmt.Sprintf("consumer consume %s %s", delivery, consumer)) // COMMENTOUT
 		consumer.Consume(delivery)
+		if atomic.LoadInt32(&queue.consumingStopped) == 1 {
+			return
+		}
 	}
 }
 
@@ -477,6 +508,8 @@ func (queue *redisQueue) consumerBatchConsume(batchSize int, timeout time.Durati
 	timer := time.NewTimer(timeout)
 	stopTimer(timer) // timer not active yet
 
+	queue.increaseConsumerCount()
+	defer queue.decreaseConsumerCount()
 	for {
 		select {
 		case <-timer.C:
@@ -506,6 +539,9 @@ func (queue *redisQueue) consumerBatchConsume(batchSize int, timeout time.Durati
 
 		// debug(fmt.Sprintf("batch consume consume %d", len(batch))) // COMMENTOUT
 		consumer.Consume(batch)
+		if atomic.LoadInt32(&queue.consumingStopped) == 1 {
+			return
+		}
 
 		batch = batch[:0] // reset batch
 		stopTimer(timer)  // stop and drain the timer if it fired in between
@@ -517,6 +553,8 @@ func (queue *redisQueue) consumerBatchConsumeDelayedQueue(batchSize int, timeout
 	timer := time.NewTimer(timeout)
 	stopTimer(timer) // timer not active yet
 
+	queue.increaseConsumerCount()
+	defer queue.decreaseConsumerCount()
 	for {
 		select {
 		case <-timer.C:
@@ -546,6 +584,9 @@ func (queue *redisQueue) consumerBatchConsumeDelayedQueue(batchSize int, timeout
 
 		// debug(fmt.Sprintf("batch consume consume %d", len(batch))) // COMMENTOUT
 		consumer.Consume(batch)
+		if atomic.LoadInt32(&queue.consumingStopped) == 1 {
+			return
+		}
 
 		batch = batch[:0] // reset batch
 		stopTimer(timer)  // stop and drain the timer if it fired in between

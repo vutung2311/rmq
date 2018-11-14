@@ -37,6 +37,10 @@ func (queue *TestQueue) StopConsuming() bool {
 	return true
 }
 
+func (queue *TestQueue) WaitForConsuming() {
+	return
+}
+
 func (queue *TestQueue) AddConsumer(tag string, consumer Consumer) string {
 	return ""
 }

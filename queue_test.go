@@ -401,6 +401,65 @@ func (suite *QueueSuite) TestConsuming(c *C) {
 	c.Check(queue.StopConsuming(), Equals, false)
 }
 
+func (suite *QueueSuite) TestStopConsuming(c *C) {
+	connection := OpenConnection("consume", "tcp", fmt.Sprintf("%s:%s", os.Getenv("REDIS_HOST"), os.Getenv("REDIS_PORT")), 1)
+	queue := connection.OpenQueue("consume-q").(*redisQueue)
+
+	c.Check(queue.StopConsuming(), Equals, false)
+
+	for i := 0; i < 10; i++ {
+		c.Check(queue.Publish(fmt.Sprintf("multi-d%d", i)), Equals, true)
+	}
+	c.Check(queue.ReadyCount(), Equals, 10)
+	c.Check(queue.UnackedCount(), Equals, 0)
+	queue.StartConsuming(10, 10*time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
+	c.Check(queue.ReadyCount(), Equals, 0)
+	c.Check(queue.UnackedCount(), Equals, 10)
+
+	consumer := NewCustomTestConsumer(
+		func(delivery Delivery) {
+			time.Sleep(10 * time.Millisecond)
+			delivery.Ack()
+		},
+	)
+	queue.AddConsumer("multi-cons", consumer)
+	time.Sleep(25 * time.Millisecond)
+	c.Check(queue.StopConsuming(), Equals, true)
+	c.Check(queue.ReadyCount(), Equals, 0)
+	c.Check(queue.UnackedCount(), Equals, 8)
+}
+
+func (suite *QueueSuite) TestWaitForConsuming(c *C) {
+	connection := OpenConnection("consume", "tcp", fmt.Sprintf("%s:%s", os.Getenv("REDIS_HOST"), os.Getenv("REDIS_PORT")), 1)
+	queue := connection.OpenQueue("consume-q").(*redisQueue)
+
+	c.Check(queue.StopConsuming(), Equals, false)
+
+	for i := 0; i < 10; i++ {
+		c.Check(queue.Publish(fmt.Sprintf("multi-d%d", i)), Equals, true)
+	}
+	c.Check(queue.ReadyCount(), Equals, 10)
+	c.Check(queue.UnackedCount(), Equals, 0)
+	queue.StartConsuming(10, 10*time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
+	c.Check(queue.ReadyCount(), Equals, 0)
+	c.Check(queue.UnackedCount(), Equals, 10)
+
+	consumer := NewCustomTestConsumer(
+		func(delivery Delivery) {
+			time.Sleep(10 * time.Millisecond)
+			delivery.Ack()
+		},
+	)
+	queue.AddConsumer("multi-cons", consumer)
+	time.Sleep(25 * time.Millisecond)
+	c.Check(queue.StopConsuming(), Equals, true)
+	queue.WaitForConsuming()
+	c.Check(queue.ReadyCount(), Equals, 0)
+	c.Check(queue.UnackedCount(), Equals, 7)
+}
+
 func (suite *QueueSuite) BenchmarkQueue(c *C) {
 	// open queue
 	connection := OpenConnection("bench-conn", "tcp", fmt.Sprintf("%s:%s", os.Getenv("REDIS_HOST"), os.Getenv("REDIS_PORT")), 1)
