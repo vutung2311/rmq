@@ -365,6 +365,10 @@ func (queue *redisQueue) consume() {
 
 		if atomic.LoadInt32(&queue.consumingStopped) == 1 {
 			close(queue.deliveryChan)
+			// drain the channel
+			for len(queue.deliveryChan) > 0 {
+				<-queue.deliveryChan
+			}
 			// log.Printf("rmq queue stopped consuming %s", queue)
 			return
 		}
@@ -382,6 +386,10 @@ func (queue *redisQueue) consumeForDelayedQueue() {
 
 		if atomic.LoadInt32(&queue.consumingStopped) == 1 {
 			close(queue.deliveryChanForDelayedQueue)
+			// drain the channel
+			for len(queue.deliveryChanForDelayedQueue) > 0 {
+				<-queue.deliveryChanForDelayedQueue
+			}
 			// log.Printf("rmq queue stopped consuming %s", queue)
 			return
 		}
@@ -485,9 +493,6 @@ func (queue *redisQueue) consumerConsume(consumer Consumer) {
 	for delivery := range queue.deliveryChan {
 		// debug(fmt.Sprintf("consumer consume %s %s", delivery, consumer)) // COMMENTOUT
 		consumer.Consume(delivery)
-		if atomic.LoadInt32(&queue.consumingStopped) == 1 {
-			return
-		}
 	}
 }
 
@@ -497,9 +502,6 @@ func (queue *redisQueue) consumerConsumeDelayedQueue(consumer Consumer) {
 	for delivery := range queue.deliveryChanForDelayedQueue {
 		// debug(fmt.Sprintf("consumer consume %s %s", delivery, consumer)) // COMMENTOUT
 		consumer.Consume(delivery)
-		if atomic.LoadInt32(&queue.consumingStopped) == 1 {
-			return
-		}
 	}
 }
 
@@ -539,9 +541,6 @@ func (queue *redisQueue) consumerBatchConsume(batchSize int, timeout time.Durati
 
 		// debug(fmt.Sprintf("batch consume consume %d", len(batch))) // COMMENTOUT
 		consumer.Consume(batch)
-		if atomic.LoadInt32(&queue.consumingStopped) == 1 {
-			return
-		}
 
 		batch = batch[:0] // reset batch
 		stopTimer(timer)  // stop and drain the timer if it fired in between
@@ -584,9 +583,6 @@ func (queue *redisQueue) consumerBatchConsumeDelayedQueue(batchSize int, timeout
 
 		// debug(fmt.Sprintf("batch consume consume %d", len(batch))) // COMMENTOUT
 		consumer.Consume(batch)
-		if atomic.LoadInt32(&queue.consumingStopped) == 1 {
-			return
-		}
 
 		batch = batch[:0] // reset batch
 		stopTimer(timer)  // stop and drain the timer if it fired in between
