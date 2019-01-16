@@ -3,7 +3,6 @@ package rmq
 import (
 	"fmt"
 	"log"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -444,46 +443,59 @@ func (queue *redisQueue) consumeBatch(batchSize int) bool {
 	return true
 }
 
+func (queue *redisQueue) moveFromSortedSetToList(from string, to string, now time.Time, batchSize int) *redis.Cmd {
+	return queue.redisClient.Eval(
+		`-- Get all of the messages with an expired "score"...
+local val = redis.call('zrangebyscore', KEYS[1], '-inf', ARGV[1])
+-- If we have values in the array, we will remove batchSize of them from the first queue
+-- and add them onto the destination queue in chunks of 100, which moves
+-- batchSize of the appropriate messages onto the destination queue very safely.
+if(next(val) ~= nil) then
+    redis.call('zremrangebyrank', KEYS[1], 0, ARGV[2] - 1)
+    for i = 1, ARGV[2], 100 do
+        redis.call('lpush', KEYS[2], unpack(val, i, math.min(i+99, ARGV[2])))
+    end
+end
+return val`,
+		[]string{from, to},
+		now.UnixNano(),
+		batchSize,
+	)
+}
+
 // consumeBatchForDelayedQueue tries to read batchSize deliveries, returns true if any and all were consumed
 func (queue *redisQueue) consumeBatchForDelayedQueue(batchSize int) bool {
 	if batchSize == 0 {
 		return false
 	}
 
-	for j := 0; j < batchSize; {
-		result := queue.redisClient.ZRangeByScore(
-			queue.delayedKey,
-			redis.ZRangeBy{
-				Min: "0",
-				Max: strconv.FormatFloat(float64(time.Now().UnixNano()), 'f', -1, 64),
-			},
-		)
-		if redisErrIsNil(result) {
-			// debug(fmt.Sprintf("rmq queue consumed last batch %s %d", queue, i)) // COMMENTOUT
+	result := queue.moveFromSortedSetToList(queue.delayedKey, queue.unackedKey, time.Now(), batchSize)
+	if redisErrIsNil(result) {
+		// debug(fmt.Sprintf("rmq queue consumed last batch %s %d", queue, i)) // COMMENTOUT
+		return false
+	}
+
+	values, ok := result.Val().([]interface{})
+	if !ok {
+		return false
+	}
+
+	for _, value := range values {
+		payload, ok := value.(string)
+		if !ok {
 			return false
 		}
 
-		for _, payload := range result.Val() {
-			if redisErrIsNil(queue.redisClient.LPush(queue.unackedKey, payload)) {
-				return false
-			}
-			// debug(fmt.Sprintf("consume %d/%d %s %s", i, batchSize, result.Val(), queue)) // COMMENTOUT
-			queue.deliveryChanForDelayedQueue <- newDelivery(
-				payload,
-				queue.unackedKey,
-				queue.delayedKey,
-				queue.rejectedKey,
-				queue.pushKey,
-				queue.redisClient,
-			)
-			if redisErrIsNil(queue.redisClient.ZRem(queue.delayedKey, payload)) {
-				return false
-			}
-			j++
-		}
+		queue.deliveryChanForDelayedQueue <- newDelivery(
+			payload,
+			queue.unackedKey,
+			queue.delayedKey,
+			queue.rejectedKey,
+			queue.pushKey,
+			queue.redisClient,
+		)
 	}
 
-	// debug(fmt.Sprintf("rmq queue consumed batch %s %d", queue, batchSize)) // COMMENTOUT
 	return true
 }
 
