@@ -58,7 +58,7 @@ type redisQueue struct {
 	rejectedKey    string // key to list of rejected deliveries
 	unackedKey     string // key to list of currently consuming deliveries
 	pushKey        string // key to list of pushed deliveries
-	redisClient    *redis.Client
+	redisClient    redis.UniversalClient
 
 	deliveryChan                chan Delivery // nil for publish channels, not nil for consuming channels
 	deliveryChanForDelayedQueue chan Delivery // nil for publish channels, not nil for consuming channels
@@ -72,7 +72,7 @@ type redisQueue struct {
 	consumingStopped int32
 }
 
-func newQueue(name, connectionName, queuesKey string, redisClient *redis.Client) *redisQueue {
+func newQueue(name, connectionName, queuesKey string, redisClient redis.UniversalClient) *redisQueue {
 	consumersKey := strings.Replace(connectionQueueConsumersTemplate, phConnection, connectionName, 1)
 	consumersKey = strings.Replace(consumersKey, phQueue, name, 1)
 

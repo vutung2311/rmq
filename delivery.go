@@ -21,10 +21,10 @@ type wrapDelivery struct {
 	delayedKey  string
 	rejectedKey string
 	pushKey     string
-	redisClient *redis.Client
+	redisClient redis.UniversalClient
 }
 
-func newDelivery(payload, unackedKey, delayedKey, rejectedKey, pushKey string, redisClient *redis.Client) *wrapDelivery {
+func newDelivery(payload, unackedKey, delayedKey, rejectedKey, pushKey string, redisClient redis.UniversalClient) *wrapDelivery {
 	return &wrapDelivery{
 		payload:     payload,
 		unackedKey:  unackedKey,

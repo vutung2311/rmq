@@ -25,12 +25,12 @@ type redisConnection struct {
 	Name             string
 	heartbeatKey     string // key to keep alive
 	queuesKey        string // key to list of queues consumed by this connection
-	redisClient      *redis.Client
+	redisClient      redis.UniversalClient
 	heartbeatStopped bool
 }
 
 // OpenConnectionWithRedisClient opens and returns a new connection
-func OpenConnectionWithRedisClient(tag string, redisClient *redis.Client) *redisConnection {
+func OpenConnectionWithRedisClient(tag string, redisClient redis.UniversalClient) *redisConnection {
 	name := fmt.Sprintf("%s-%s", tag, uniuri.NewLen(6))
 
 	connection := &redisConnection{
@@ -178,5 +178,5 @@ func (connection *redisConnection) openQueue(name string) *redisQueue {
 
 // flushDb flushes the redis database to reset everything, used in tests
 func (connection *redisConnection) flushDb() {
-	connection.redisClient.FlushDb()
+	connection.redisClient.FlushDB()
 }
